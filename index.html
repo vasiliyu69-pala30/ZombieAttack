@@ -520,12 +520,15 @@ var PAL = {
   grassA: '#16281a', grassB: '#1c331f', grassC: '#233d25',
   dirt: '#2a2116', dirtDark: '#1c160e',
   fence: '#4a3d2a',
-  playerCoat: '#2f8f8f', playerCoatDark: '#1c5c5c',
-  playerHelmet: '#9aa0a8', playerHelmetDark: '#5c6169',
+  playerCoat: '#3a4a2a', playerCoatDark: '#232e19',
+  playerSkin: '#c9915f', playerSkinDark: '#8a5a38',
+  playerHeadband: '#b31f24', playerHeadbandDark: '#6e1013',
   gun: '#3a2d1e',
   zBody: ['#4f7a3a','#6a8a3a','#7a5a8a','#3a6a5a'],
   zBodyDark: ['#2e4a20','#425a20','#463356','#1f3a30'],
   zEye: '#e8342a',
+  zClaw: '#0d0d0a',
+  zBone: '#cfc9a0',
   blood: '#7a1210',
   bulletCore: '#ffe98a',
   bulletTrail:'#e8c34a',
@@ -1253,39 +1256,47 @@ function drawPlayer(){
   ctx.translate(player.x, player.y);
   ctx.rotate(player.angle);
 
-  var bodyDark = player.hurtFlash > 0 ? '#ffffff' : PAL.playerCoatDark;
-  var bodyLight = player.hurtFlash > 0 ? '#ffdddd' : PAL.playerCoat;
+  var hurt = player.hurtFlash > 0;
+  var bodyDark = hurt ? '#ffffff' : PAL.playerCoatDark;
+  var bodyLight = hurt ? '#ffdddd' : PAL.playerCoat;
+  var skin = hurt ? '#ffdddd' : PAL.playerSkin;
+  var skinDark = hurt ? '#ffbbbb' : PAL.playerSkinDark;
 
   var legSwing = 0, bounce = 0;
   if(player.isMoving){
-    legSwing = Math.sin(player.walkPhase) * 1.6;
+    legSwing = Math.sin(player.walkPhase) * 1.7;
   } else {
     bounce = (1 - Math.cos(player.idlePhase)) * 0.9;
   }
-  var legH = 2.4 - Math.min(1.4, bounce*0.55);
+  var legH = 3 - Math.min(1.6, bounce*0.6);
 
-  ctx.fillStyle = '#161616';
-  ctx.fillRect(-8.5, -3.6 + legSwing, 3, legH);
-  ctx.fillRect(-8.5, 1.2 - legSwing, 3, legH);
+  ctx.fillStyle = '#26261c';
+  ctx.fillRect(-9, -3.8 + legSwing, 3.4, legH);
+  ctx.fillRect(-9, 0.9 - legSwing, 3.4, legH);
+  ctx.fillStyle = '#0e0e0c';
+  ctx.fillRect(-9.4, -3.8 + legSwing + legH - 0.7, 4, 1.3);
+  ctx.fillRect(-9.4, 0.9 - legSwing + legH - 0.7, 4, 1.3);
 
   ctx.save();
   ctx.translate(0, bounce*0.4);
 
-  ctx.fillStyle = PAL.gun;
-  ctx.fillRect(-1.5, -1.6, 5, 3.2);
-  ctx.fillStyle = '#55565c';
-  ctx.fillRect(3, -1, 10, 2);
-  ctx.fillStyle = '#2a2a2a';
-  ctx.fillRect(5.5, 1, 2, 3.5);
-  ctx.fillStyle = '#9aa0a8';
-  ctx.fillRect(12.5, -0.6, 1.4, 1.2);
+  ctx.fillStyle = skinDark;
+  ctx.fillRect(1.5, 1.6, 5, 2.6);
+  ctx.fillStyle = skin;
+  ctx.fillRect(5.6, 2, 2.4, 2.2);
 
-  ctx.fillStyle = bodyDark;
-  ctx.fillRect(0.5, -3.6, 4, 1.8);
-  ctx.fillRect(2.5, 1.8, 3.5, 1.8);
-  ctx.fillStyle = '#e8c9a0';
-  ctx.fillRect(4, -3.4, 1.5, 1.4);
-  ctx.fillRect(5.5, 2, 1.5, 1.4);
+  ctx.fillStyle = PAL.gun;
+  ctx.fillRect(-1.5, -2, 6.5, 4);
+  ctx.fillStyle = '#55565c';
+  ctx.fillRect(5, -1.3, 12, 2.4);
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(6.5, 1.6, 2.6, 4.2);
+  ctx.fillStyle = '#9aa0a8';
+  ctx.fillRect(15.5, -0.7, 1.8, 1.4);
+  ctx.fillStyle = PAL.ammo;
+  ctx.fillRect(7,3.4,1,1);
+  ctx.fillRect(8.5,3.6,1,1);
+  ctx.fillRect(10,3.8,1,1);
 
   ctx.fillStyle = bodyDark;
   ctx.beginPath();
@@ -1295,14 +1306,26 @@ function drawPlayer(){
   ctx.beginPath();
   ctx.arc(0,0,5.5,0,Math.PI*2);
   ctx.fill();
-  ctx.fillStyle = PAL.playerHelmetDark;
+
+  ctx.fillStyle = skinDark;
+  ctx.beginPath(); ctx.arc(0.3,-4.0,1.8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.fillRect(1, -4.7, 6, 1.9);
+  ctx.fillStyle = skinDark;
+  ctx.fillRect(6.6, -3.7, 2.2, 1.7);
+
+  ctx.fillStyle = skinDark;
   ctx.beginPath();
-  ctx.arc(1,0,3.4,0,Math.PI*2);
+  ctx.arc(2.6,0,3,0,Math.PI*2);
   ctx.fill();
-  ctx.fillStyle = PAL.playerHelmet;
+  ctx.fillStyle = skin;
   ctx.beginPath();
-  ctx.arc(1.4,0,2.6,0,Math.PI*2);
+  ctx.arc(2.9,0,2.3,0,Math.PI*2);
   ctx.fill();
+  ctx.fillStyle = PAL.playerHeadband;
+  ctx.fillRect(1.4,-1,4,1.5);
+  ctx.fillStyle = PAL.playerHeadbandDark;
+  ctx.fillRect(0.2,-0.6,1.4,1.6);
   ctx.restore();
 
   ctx.restore();
@@ -1317,16 +1340,37 @@ function drawZombie(z){
   var limp = Math.sin(z.bob) * 1.3;
 
   ctx.fillStyle = '#111008';
-  ctx.fillRect(-6.5, -2.6 + limp, 2.4, 2.4);
-  ctx.fillRect(-6.5, 0.6 - limp*0.4, 2.4, 2.8);
+  ctx.fillRect(-6.5, -2.8 + limp, 2.4, 2.6);
+  ctx.fillRect(-7.4, 0.6 - limp*0.4, 2.6, 3.4);
+  ctx.fillStyle = PAL.zBone;
+  ctx.fillRect(-6.8, 1.6 - limp*0.4, 1, 1);
 
   ctx.fillStyle = dark;
   ctx.beginPath(); ctx.arc(0,0,6.5,0,Math.PI*2); ctx.fill();
   ctx.fillStyle = body;
   ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+
   ctx.fillStyle = dark;
-  ctx.fillRect(1.5,-4.4,5.5,1.8);
-  ctx.fillRect(1.5,2.6,5.5,1.8);
+  ctx.fillRect(-3.6,-4.8,2.2,3.4);
+  ctx.fillStyle = PAL.blood;
+  ctx.fillRect(-1,1.6,2.6,2.4);
+
+  ctx.fillStyle = dark;
+  ctx.fillRect(1.5,-4.6,6.8,1.9);
+  ctx.fillRect(1.5,2.7,6.8,1.9);
+  ctx.fillStyle = PAL.zClaw;
+  ctx.fillRect(7.6,-4.9,1.5,0.7);
+  ctx.fillRect(7.6,-3.9,1.5,0.7);
+  ctx.fillRect(7.6,2.7,1.5,0.7);
+  ctx.fillRect(7.6,3.7,1.5,0.7);
+
+  ctx.fillStyle = '#0a0a06';
+  ctx.fillRect(3.4,-1.2,2.2,2.3);
+  ctx.fillStyle = PAL.zBone;
+  ctx.fillRect(3.6,-1.0,0.7,0.6);
+  ctx.fillRect(4.7,-1.0,0.7,0.6);
+  ctx.fillRect(3.6,0.5,0.7,0.6);
+
   ctx.fillStyle = PAL.zEye;
   ctx.fillRect(2,-1.5,1.6,1.6);
   ctx.fillRect(2,0.2,1.6,1.6);
