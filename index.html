@@ -69,6 +69,7 @@ body{background:var(--ink)}
   display:block;
   cursor:crosshair;
   outline:none;
+  touch-action:none;
 }
 .gy-overlay{
   position:absolute;
@@ -144,48 +145,16 @@ body{background:var(--ink)}
   letter-spacing:1px;
 }
 .gy-mute:hover{border-color:var(--accent)}
-.gy-touch-controls{
-  position:absolute;
-  left:10px;
-  bottom:10px;
-  display:flex;
-  align-items:flex-end;
-  gap:14px;
-  z-index:5;
-}
-.gy-dpad{
-  display:grid;
-  grid-template-columns:repeat(3, 38px);
-  grid-template-rows:repeat(3, 38px);
-  gap:3px;
-}
-.gy-dbtn{
-  font-family:inherit;
-  font-size:14px;
-  line-height:1;
-  color:var(--accent);
-  background:rgba(19,37,26,0.82);
-  border:2px solid var(--panel-line);
-  border-radius:4px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:0;
-  touch-action:none;
-  -webkit-user-select:none;
-  user-select:none;
-}
-.gy-dbtn:active{background:rgba(232,195,74,0.35);border-color:var(--accent)}
-.gy-dbtn-up{grid-column:2;grid-row:1}
-.gy-dbtn-left{grid-column:1;grid-row:2}
-.gy-dbtn-right{grid-column:3;grid-row:2}
-.gy-dbtn-down{grid-column:2;grid-row:3}
 .gy-fire-btn{
+  position:absolute;
+  left:16px;
+  bottom:16px;
+  z-index:5;
   font-family:inherit;
   font-size:10px;
   letter-spacing:1px;
-  width:68px;
-  height:68px;
+  width:72px;
+  height:72px;
   border-radius:50%;
   color:var(--accent);
   background:rgba(232,195,74,0.22);
@@ -229,7 +198,7 @@ body{background:var(--ink)}
         MOUSE to aim &nbsp;·&nbsp; hold <kbd>CLICK</kbd> to fire &nbsp;·&nbsp; <kbd>P</kbd> to pause
       </div>
       <div class="gy-controls-hint" id="gyHintTouch" hidden>
-        ON-SCREEN ARROWS to move &nbsp;·&nbsp; hold FIRE to auto-aim at the nearest ghoul
+        DRAG anywhere on screen to move &nbsp;·&nbsp; hold FIRE to auto-aim at the nearest ghoul
       </div>
     </div>
 
@@ -250,15 +219,7 @@ body{background:var(--ink)}
       <button class="gy-btn gy-ghost" id="gyTitleBtn" type="button">TITLE SCREEN</button>
     </div>
 
-    <div class="gy-touch-controls" id="gyTouchControls" hidden>
-      <div class="gy-dpad" id="gyDpad">
-        <button class="gy-dbtn gy-dbtn-up" data-dir="up" type="button" aria-label="Move up">&#9650;</button>
-        <button class="gy-dbtn gy-dbtn-left" data-dir="left" type="button" aria-label="Move left">&#9664;</button>
-        <button class="gy-dbtn gy-dbtn-right" data-dir="right" type="button" aria-label="Move right">&#9654;</button>
-        <button class="gy-dbtn gy-dbtn-down" data-dir="down" type="button" aria-label="Move down">&#9660;</button>
-      </div>
-      <button class="gy-fire-btn" id="gyFireBtn" type="button" aria-label="Fire">FIRE</button>
-    </div>
+    <button class="gy-fire-btn" id="gyFireBtn" type="button" aria-label="Fire" hidden>FIRE</button>
   </div>
 
   <div class="gy-controls-hint">WAVES OF GHOULS GET FASTER. GRAB THE RED CROSS TO HEAL, THE YELLOW BOLT FOR RAPID FIRE. EVERY 4TH WAVE A BOSS ARRIVES — DODGE CHEBRANYA'S SHIELD BASH AND SHOOT HIS GENERATOR FROM BEHIND, RUSH DOWN THE SYSADMIN BEFORE HIS GLITCH SWARM OVERWHELMS YOU, OR DODGE THE TROJAN WORM'S TRAIN CARS AND SHOOT ITS LOCOMOTIVE HEAD.</div>
@@ -276,8 +237,7 @@ var W = canvas.width, H = canvas.height;
 var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 document.getElementById('gyHintDesktop').hidden = isTouch;
 document.getElementById('gyHintTouch').hidden = !isTouch;
-var touchControlsEl = document.getElementById('gyTouchControls');
-if(isTouch){ touchControlsEl.hidden = false; }
+var fireBtnEl = document.getElementById('gyFireBtn');
 
 function loadNum(key, fallback){
   try{
@@ -463,6 +423,7 @@ function showScreen(which){
   titleScreen.hidden = which !== 'title';
   pauseScreen.hidden = which !== 'pause';
   overScreen.hidden = which !== 'over';
+  fireBtnEl.hidden = !(isTouch && state === STATE_PLAY);
 }
 
 var keys = {};
@@ -493,20 +454,41 @@ canvas.addEventListener('mousemove', function(e){ updateMouseFromClient(e.client
 canvas.addEventListener('mousedown', function(e){ mouse.down = true; updateMouseFromClient(e.clientX, e.clientY); canvas.focus(); });
 window.addEventListener('mouseup', function(){ mouse.down = false; });
 
-var dpadState = { up:false, down:false, left:false, right:false };
-var dpadButtons = document.querySelectorAll('.gy-dbtn');
-for(var dbi=0; dbi<dpadButtons.length; dbi++){
-  (function(btn){
-    var dir = btn.getAttribute('data-dir');
-    function setDir(v){ return function(e){ e.preventDefault(); dpadState[dir] = v; }; }
-    btn.addEventListener('touchstart', setDir(true), {passive:false});
-    btn.addEventListener('touchend', setDir(false), {passive:false});
-    btn.addEventListener('touchcancel', setDir(false), {passive:false});
-  })(dpadButtons[dbi]);
+var touchMove = { id:null, sx:0, sy:0, dx:0, dy:0 };
+canvas.addEventListener('touchstart', function(e){
+  if(touchMove.id !== null) return;
+  var t = e.changedTouches[0];
+  e.preventDefault();
+  touchMove.id = t.identifier;
+  touchMove.sx = t.clientX;
+  touchMove.sy = t.clientY;
+  touchMove.dx = 0; touchMove.dy = 0;
+}, {passive:false});
+canvas.addEventListener('touchmove', function(e){
+  for(var i=0;i<e.changedTouches.length;i++){
+    var t = e.changedTouches[i];
+    if(t.identifier === touchMove.id){
+      e.preventDefault();
+      var dx = t.clientX - touchMove.sx, dy = t.clientY - touchMove.sy;
+      var max = 44;
+      var len = Math.hypot(dx,dy) || 1;
+      var clamped = Math.min(len, max) / max;
+      touchMove.dx = (dx/len) * clamped;
+      touchMove.dy = (dy/len) * clamped;
+    }
+  }
+}, {passive:false});
+function endTouchMove(e){
+  for(var i=0;i<e.changedTouches.length;i++){
+    if(e.changedTouches[i].identifier === touchMove.id){
+      touchMove.id = null; touchMove.dx = 0; touchMove.dy = 0;
+    }
+  }
 }
+canvas.addEventListener('touchend', endTouchMove, {passive:false});
+canvas.addEventListener('touchcancel', endTouchMove, {passive:false});
 
 var fireHeld = false;
-var fireBtnEl = document.getElementById('gyFireBtn');
 fireBtnEl.addEventListener('touchstart', function(e){ e.preventDefault(); fireHeld = true; getActx(); }, {passive:false});
 fireBtnEl.addEventListener('touchend', function(e){ e.preventDefault(); fireHeld = false; }, {passive:false});
 fireBtnEl.addEventListener('touchcancel', function(e){ e.preventDefault(); fireHeld = false; }, {passive:false});
@@ -1088,12 +1070,7 @@ function update(dt){
   if(keys['KeyS'] || keys['ArrowDown']) mvy += 1;
   if(keys['KeyA'] || keys['ArrowLeft']) mvx -= 1;
   if(keys['KeyD'] || keys['ArrowRight']) mvx += 1;
-  if(isTouch){
-    if(dpadState.up) mvy -= 1;
-    if(dpadState.down) mvy += 1;
-    if(dpadState.left) mvx -= 1;
-    if(dpadState.right) mvx += 1;
-  }
+  if(isTouch){ mvx += touchMove.dx; mvy += touchMove.dy; }
   var mlen = Math.hypot(mvx,mvy);
   player.isMoving = mlen > 0.05;
   if(player.isMoving){ player.walkPhase += dt*9; }
