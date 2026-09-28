@@ -222,7 +222,7 @@ body{background:var(--ink)}
     <button class="gy-fire-btn" id="gyFireBtn" type="button" aria-label="Fire" hidden>FIRE</button>
   </div>
 
-  <div class="gy-controls-hint">WAVES OF GHOULS GET FASTER. GRAB THE RED CROSS TO HEAL, THE YELLOW BOLT FOR RAPID FIRE. EVERY 4TH WAVE A BOSS ARRIVES — DODGE CHEBRANYA'S SHIELD BASH AND SHOOT HIS GENERATOR FROM BEHIND, RUSH DOWN THE SYSADMIN BEFORE HIS GLITCH SWARM OVERWHELMS YOU, OR DODGE THE TROJAN WORM'S TRAIN CARS AND SHOOT ITS LOCOMOTIVE HEAD.</div>
+  <div class="gy-controls-hint">WAVES OF GHOULS GET FASTER. GRAB THE RED CROSS TO HEAL, THE YELLOW BOLT FOR RAPID FIRE. EACH WAVE DROPS ONE GLOWING RING POWER-UP FOR JUST 5 SECONDS — GRAB IT BEFORE IT FADES. EVERY 4TH WAVE A BOSS ARRIVES — DODGE CHEBRANYA'S SHIELD BASH AND SHOOT HIS GENERATOR FROM BEHIND, RUSH DOWN THE SYSADMIN BEFORE HIS GLITCH SWARM OVERWHELMS YOU, OR DODGE THE TROJAN WORM'S TRAIN CARS AND SHOOT ITS LOCOMOTIVE HEAD.</div>
 </div>
 
 <script>
@@ -533,6 +533,8 @@ var bgTiles = [];
 var player, bullets, zombies, particles, pickups;
 var score, wave, waveTimer, waveState, spawnQueue, spawnTimer;
 var rapidFireTimer;
+var weaponBoostTimer = 0, speedBoostTimer = 0;
+var specialPickup = null;
 var shakeTime = 0, shakeMag = 0;
 var boss = null, bossBullets = [], pulseRings = [];
 var pendingBossType = null, bossIntroTimer = 0, bossAnnounceText = '';
@@ -558,6 +560,9 @@ function resetGame(){
   score = 0;
   wave = 0;
   rapidFireTimer = 0;
+  weaponBoostTimer = 0;
+  speedBoostTimer = 0;
+  specialPickup = null;
   waveState = 'intermission';
   waveTimer = 1.4;
   spawnQueue = 0;
@@ -639,6 +644,7 @@ function bossTypeForWave(w){
 
 function startWave(){
   wave++;
+  spawnSpecialPickup();
   if(wave % 4 === 0){
     pendingBossType = bossTypeForWave(wave);
     bossAnnounceText = pendingBossType === 'chebranya' ? 'КОМАНДИР ЧЕБРАНЯ' :
@@ -673,13 +679,20 @@ function burstMuzzle(x,y,angle){
 
 function fireBullet(){
   var speed = 190;
-  bullets.push({
-    x: player.x + Math.cos(player.angle)*13,
-    y: player.y + Math.sin(player.angle)*13,
-    vx: Math.cos(player.angle)*speed,
-    vy: Math.sin(player.angle)*speed,
-    life: 1.1
-  });
+  var boosted = weaponBoostTimer > 0;
+  var dmg = boosted ? 24 : 12;
+  var spread = boosted ? [-0.18, 0, 0.18] : [0];
+  for(var i=0; i<spread.length; i++){
+    var a = player.angle + spread[i];
+    bullets.push({
+      x: player.x + Math.cos(a)*13,
+      y: player.y + Math.sin(a)*13,
+      vx: Math.cos(a)*speed,
+      vy: Math.sin(a)*speed,
+      life: 1.1,
+      dmg: dmg
+    });
+  }
   burstMuzzle(player.x + Math.cos(player.angle)*14, player.y + Math.sin(player.angle)*14, player.angle);
   sfxShoot();
   shakeTime = 0.04; shakeMag = 1;
@@ -688,6 +701,33 @@ function fireBullet(){
 function spawnPickup(x,y,forceType){
   var type = forceType || (Math.random() < 0.6 ? 'health' : 'rapid');
   pickups.push({x:x,y:y,type:type,life:9});
+}
+
+function spawnSpecialPickup(){
+  var types = ['weapon','health','speed','score'];
+  var type = types[(Math.random()*types.length)|0];
+  specialPickup = {
+    x: rand(30, W-30),
+    y: rand(30, H-30),
+    type: type,
+    life: 5,
+    maxLife: 5
+  };
+  beep(500, 0.12, 'square', 0.12, 800);
+}
+
+function collectSpecialPickup(type){
+  sfxPickup();
+  shakeTime = 0.1; shakeMag = 2;
+  if(type === 'weapon'){
+    weaponBoostTimer = 12;
+  } else if(type === 'health'){
+    player.hp = player.maxHp;
+  } else if(type === 'speed'){
+    speedBoostTimer = 10;
+  } else if(type === 'score'){
+    score += 150;
+  }
 }
 
 function nearestZombie(x,y){
@@ -807,9 +847,9 @@ function sfxBossDown(){
   setTimeout(function(){ beep(100, 0.3, 'sawtooth', 0.2, 40); }, 260);
 }
 
-function hitBoss(bx,by){
+function hitBoss(bx,by,baseDmg){
   if(!boss) return;
-  var dmg = 12;
+  var dmg = baseDmg || 12;
   if(boss.type === 'chebranya'){
     var hitAngle = Math.atan2(by-boss.y, bx-boss.x);
     var rel = Math.abs(normAngle(hitAngle - boss.facingAngle));
@@ -1077,8 +1117,9 @@ function update(dt){
   else { player.idlePhase += dt*4.2; }
   if(mlen > 1){ mvx/=mlen; mvy/=mlen; }
 
-  player.x = clamp(player.x + mvx*player.speed*dt, 6, W-6);
-  player.y = clamp(player.y + mvy*player.speed*dt, 6, H-6);
+  var moveSpeed = player.speed * (speedBoostTimer > 0 ? 1.6 : 1);
+  player.x = clamp(player.x + mvx*moveSpeed*dt, 6, W-6);
+  player.y = clamp(player.y + mvy*moveSpeed*dt, 6, H-6);
 
   if(isTouch){
     var target = nearestZombie(player.x, player.y);
@@ -1095,8 +1136,20 @@ function update(dt){
     fireBullet();
   }
   if(rapidFireTimer > 0) rapidFireTimer -= dt;
+  if(weaponBoostTimer > 0) weaponBoostTimer -= dt;
+  if(speedBoostTimer > 0) speedBoostTimer -= dt;
   if(player.hurtCooldown > 0) player.hurtCooldown -= dt;
   if(player.hurtFlash > 0) player.hurtFlash -= dt;
+
+  if(specialPickup){
+    specialPickup.life -= dt;
+    if(specialPickup.life <= 0){
+      specialPickup = null;
+    } else if(dist(specialPickup.x, specialPickup.y, player.x, player.y) < 9){
+      collectSpecialPickup(specialPickup.type);
+      specialPickup = null;
+    }
+  }
 
   if(waveState === 'intermission'){
     waveTimer -= dt;
@@ -1133,7 +1186,7 @@ function update(dt){
     for(var j=zombies.length-1;j>=0;j--){
       var z = zombies[j];
       if(dist(b.x,b.y,z.x,z.y) < z.r+2){
-        z.hp -= 12;
+        z.hp -= b.dmg;
         burstBlood(b.x,b.y);
         hitSomething = true;
         sfxHit();
@@ -1148,7 +1201,7 @@ function update(dt){
       }
     }
     if(!hitSomething && boss && dist(b.x,b.y,boss.x,boss.y) < boss.r+2){
-      hitBoss(b.x,b.y);
+      hitBoss(b.x,b.y,b.dmg);
       hitSomething = true;
     }
     if(hitSomething){ bullets.splice(i,1); }
@@ -1545,6 +1598,51 @@ function drawPickup(pu){
   }
 }
 
+function drawSpecialPickup(sp){
+  var pulse = Math.sin(performance.now()/100)*0.5+0.5;
+  var colors = { weapon:'#ff6a3c', health:'#ff4d6a', speed:'#3cc8ff', score:'#ffe14d' };
+  var col = colors[sp.type] || '#ffffff';
+
+  ctx.save();
+  ctx.globalAlpha = 0.35 + pulse*0.25;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(sp.x, sp.y, 9 + pulse*2, 0, Math.PI*2); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = '#141414';
+  ctx.beginPath(); ctx.arc(sp.x, sp.y, 7, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = col;
+
+  if(sp.type === 'weapon'){
+    ctx.fillRect(sp.x-4, sp.y-1, 9, 2);
+    ctx.fillRect(sp.x-1, sp.y-3, 3, 2);
+  } else if(sp.type === 'health'){
+    ctx.fillRect(sp.x-1, sp.y-4, 2, 8);
+    ctx.fillRect(sp.x-4, sp.y-1, 8, 2);
+  } else if(sp.type === 'speed'){
+    ctx.beginPath();
+    ctx.moveTo(sp.x-2,sp.y-5); ctx.lineTo(sp.x+2,sp.y-1); ctx.lineTo(sp.x-1,sp.y-1);
+    ctx.lineTo(sp.x+3,sp.y+5); ctx.lineTo(sp.x-3,sp.y+1); ctx.lineTo(sp.x,sp.y+1);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.fillRect(sp.x-1, sp.y-4, 2, 2);
+    ctx.fillRect(sp.x-1, sp.y+2, 2, 2);
+    ctx.fillRect(sp.x-4, sp.y-1, 2, 2);
+    ctx.fillRect(sp.x+2, sp.y-1, 2, 2);
+    ctx.fillRect(sp.x-1, sp.y-1, 2, 2);
+  }
+
+  var frac = sp.life / sp.maxLife;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(sp.x, sp.y, 10, -Math.PI/2, -Math.PI/2 + frac*Math.PI*2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 function drawHud(){
   ctx.fillStyle = 'rgba(6,12,8,0.7)';
   ctx.fillRect(0,0,W,14);
@@ -1568,10 +1666,14 @@ function drawHud(){
   else { waveLabel = 'WAVE ' + wave; }
   ctx.fillText(waveLabel, W-4, 10);
 
-  if(rapidFireTimer > 0){
+  var buffs = [];
+  if(rapidFireTimer > 0) buffs.push('RAPID FIRE');
+  if(weaponBoostTimer > 0) buffs.push('OVERCHARGE');
+  if(speedBoostTimer > 0) buffs.push('SPEED');
+  if(buffs.length){
     ctx.textAlign = 'center';
     ctx.fillStyle = PAL.ammo;
-    ctx.fillText('RAPID FIRE', W/2, 10);
+    ctx.fillText(buffs.join(' + '), W/2, 10);
   }
 }
 
@@ -1584,6 +1686,7 @@ function render(){
 
   if(state === STATE_PLAY || state === STATE_PAUSE){
     for(var i=0;i<pickups.length;i++) drawPickup(pickups[i]);
+    if(specialPickup) drawSpecialPickup(specialPickup);
     for(var j=0;j<zombies.length;j++) drawZombie(zombies[j]);
     if(boss){
       if(boss.type === 'chebranya') drawBossChebranya(boss);
