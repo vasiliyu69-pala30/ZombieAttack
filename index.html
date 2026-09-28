@@ -353,6 +353,11 @@ function sfxDeath(){
   setTimeout(function(){ beep(140, 0.3, 'sawtooth', 0.15, 60); }, 150);
 }
 function sfxSpawn(){ beep(80, 0.15, 'sawtooth', 0.05, 50); }
+function sfxSecret(){
+  beep(440, 0.08, 'square', 0.16, 660);
+  setTimeout(function(){ beep(660, 0.08, 'square', 0.16, 880); }, 80);
+  setTimeout(function(){ beep(880, 0.14, 'square', 0.2, 1320); }, 160);
+}
 
 var JAZZ_BARS = [
   {root:45, type:'min7'},
@@ -540,10 +545,24 @@ document.getElementById('gyShopSkip').addEventListener('click', function(){
 });
 
 var keys = {};
+var lastSpaceTime = 0;
 window.addEventListener('keydown', function(e){
   keys[e.code] = true;
   keys[e.key.toLowerCase()] = true;
-  if(e.code === 'Space') e.preventDefault();
+  if(e.code === 'Space'){
+    e.preventDefault();
+    if(state === STATE_PLAY){
+      var nowT = performance.now();
+      if(nowT - lastSpaceTime < 400){
+        secretSpeedTimer = 6;
+        sfxSecret();
+        shakeTime = 0.15; shakeMag = 3;
+        lastSpaceTime = 0;
+      } else {
+        lastSpaceTime = nowT;
+      }
+    }
+  }
   if(e.code === 'KeyP' || e.code === 'Escape'){
     if(state === STATE_PLAY){ pauseGame(); }
     else if(state === STATE_PAUSE){ resumeGame(); }
@@ -646,7 +665,7 @@ var bgTiles = [];
 var player, bullets, zombies, particles, pickups;
 var score, wave, waveTimer, waveState, spawnQueue, spawnTimer;
 var rapidFireTimer;
-var weaponBoostTimer = 0, speedBoostTimer = 0;
+var weaponBoostTimer = 0, speedBoostTimer = 0, secretSpeedTimer = 0;
 var specialPickup = null;
 var shakeTime = 0, shakeMag = 0;
 var boss = null, bossBullets = [], pulseRings = [];
@@ -680,6 +699,7 @@ function resetGame(){
   rapidFireTimer = 0;
   weaponBoostTimer = 0;
   speedBoostTimer = 0;
+  secretSpeedTimer = 0;
   specialPickup = null;
   coins = 0;
   hpUpgradeCount = 0;
@@ -1248,7 +1268,10 @@ function update(dt){
   else { player.idlePhase += dt*4.2; }
   if(mlen > 1){ mvx/=mlen; mvy/=mlen; }
 
-  var moveSpeed = player.speed * (speedBoostTimer > 0 ? 1.6 : 1);
+  var speedMult = 1;
+  if(secretSpeedTimer > 0) speedMult = 4;
+  else if(speedBoostTimer > 0) speedMult = 1.6;
+  var moveSpeed = player.speed * speedMult;
   player.x = clamp(player.x + mvx*moveSpeed*dt, 6, W-6);
   player.y = clamp(player.y + mvy*moveSpeed*dt, 6, H-6);
 
@@ -1269,6 +1292,7 @@ function update(dt){
   if(rapidFireTimer > 0) rapidFireTimer -= dt;
   if(weaponBoostTimer > 0) weaponBoostTimer -= dt;
   if(speedBoostTimer > 0) speedBoostTimer -= dt;
+  if(secretSpeedTimer > 0) secretSpeedTimer -= dt;
   if(player.hurtCooldown > 0) player.hurtCooldown -= dt;
   if(player.hurtFlash > 0) player.hurtFlash -= dt;
   if(regenOwned && player.hp < player.maxHp){ player.hp = Math.min(player.maxHp, player.hp + dt); }
@@ -1815,6 +1839,7 @@ function drawHud(){
   if(rapidFireTimer > 0) buffs.push('RAPID FIRE');
   if(weaponBoostTimer > 0) buffs.push('OVERCHARGE');
   if(speedBoostTimer > 0) buffs.push('SPEED');
+  if(secretSpeedTimer > 0) buffs.push('x4 SPEED!');
   if(buffs.length){
     ctx.textAlign = 'center';
     ctx.fillStyle = PAL.ammo;
