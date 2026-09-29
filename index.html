@@ -301,7 +301,7 @@ body{background:var(--ink)}
     <button class="gy-fire-btn" id="gyFireBtn" type="button" aria-label="Fire" hidden>FIRE</button>
   </div>
 
-  <div class="gy-controls-hint">WAVES OF GHOULS GET FASTER. GRAB THE RED CROSS TO HEAL, THE YELLOW BOLT FOR RAPID FIRE. EACH WAVE DROPS ONE GLOWING RING POWER-UP FOR JUST 5 SECONDS — GRAB IT BEFORE IT FADES. KILLS EARN COINS — SPEND THEM IN THE 10-SECOND SHOP BETWEEN WAVES ON A MINIGUN, SHOTGUN, MAX HP, REGEN OR DAMAGE UPGRADES. EVERY 4TH WAVE A BOSS ARRIVES — DODGE CHEBRANYA'S SHIELD BASH AND SHOOT HIS GENERATOR FROM BEHIND, RUSH DOWN THE SYSADMIN BEFORE HIS GLITCH SWARM OVERWHELMS YOU, OR DODGE THE TROJAN WORM'S TRAIN CARS AND SHOOT ITS LOCOMOTIVE HEAD.</div>
+  <div class="gy-controls-hint">WAVES OF GHOULS GET FASTER. GRAB THE RED CROSS TO HEAL, THE YELLOW BOLT FOR RAPID FIRE. EACH WAVE DROPS ONE GLOWING RING POWER-UP FOR JUST 5 SECONDS — GRAB IT BEFORE IT FADES. KILLS EARN COINS — SPEND THEM IN THE 10-SECOND SHOP BETWEEN WAVES ON A MINIGUN, SHOTGUN, MAX HP, REGEN OR DAMAGE UPGRADES. FROM WAVE 10, RANDOM WALLS CARVE THE ARENA INTO A MAZE — USE THEM TO DODGE AND HIDE, BUT DON'T GET CORNERED. A RARE ROCKET LAUNCHER POWER-UP CAN BLAST A WALL OPEN WHEN YOU NEED A WAY OUT. EVERY 4TH WAVE A BOSS ARRIVES — DODGE CHEBRANYA'S SHIELD BASH AND SHOOT HIS GENERATOR FROM BEHIND, RUSH DOWN THE SYSADMIN BEFORE HIS GLITCH SWARM OVERWHELMS YOU, OR DODGE THE TROJAN WORM'S TRAIN CARS AND SHOOT ITS LOCOMOTIVE HEAD.</div>
 </div>
 
 <script>
@@ -840,6 +840,7 @@ var shakeTime = 0, shakeMag = 0;
 var boss = null, bossBullets = [], pulseRings = [];
 var pendingBossType = null, bossIntroTimer = 0, bossAnnounceText = '';
 var coins = 0, hpUpgradeCount = 0, damageUpgradeCount = 0, regenOwned = false;
+var walls = [], grenadeAmmo = 0;
 var shopTimer = 0;
 
 var WEAPON_FIRE_RATE = { pistol: 0.22, minigun: 0.07, shotgun: 0.55 };
@@ -875,6 +876,8 @@ function resetGame(){
   damageUpgradeCount = 0;
   regenOwned = false;
   shopTimer = 0;
+  walls = [];
+  grenadeAmmo = 0;
   waveState = 'intermission';
   waveTimer = 1.4;
   spawnQueue = 0;
@@ -957,10 +960,33 @@ function bossTypeForWave(w){
   return order[((idx % order.length) + order.length) % order.length];
 }
 
+function generateWalls(){
+  walls = [];
+  var count = 6 + ((Math.random()*5)|0);
+  var attempts = 0;
+  while(walls.length < count && attempts < 60){
+    attempts++;
+    var vertical = Math.random() < 0.5;
+    var w = vertical ? 8 : rand(20,44);
+    var h = vertical ? rand(20,44) : 8;
+    var x = rand(14, W-14-w);
+    var y = rand(20, H-14-h);
+    if(dist(x+w/2, y+h/2, player.x, player.y) < 36) continue;
+    var overlaps = false;
+    for(var i=0;i<walls.length;i++){
+      var ow = walls[i];
+      if(x < ow.x+ow.w+6 && x+w+6 > ow.x && y < ow.y+ow.h+6 && y+h+6 > ow.y){ overlaps = true; break; }
+    }
+    if(overlaps) continue;
+    walls.push({x:x, y:y, w:w, h:h});
+  }
+}
+
 function startWave(){
   wave++;
   spawnSpecialPickup();
   if(wave % 4 === 0){
+    walls = [];
     pendingBossType = bossTypeForWave(wave);
     bossAnnounceText = pendingBossType === 'chebranya' ? 'КОМАНДИР ЧЕБРАНЯ' :
       pendingBossType === 'sysadmin' ? 'СИСТЕМНЫЙ АДМИНИСТРАТОР' : 'ТРОЯНСКИЙ ЧЕРВЬ';
@@ -972,6 +998,7 @@ function startWave(){
     spawnQueue = 4 + wave*2;
     spawnTimer = 0;
     sfxWave();
+    if(wave >= 10){ generateWalls(); } else { walls = []; }
   }
 }
 
@@ -992,7 +1019,64 @@ function burstMuzzle(x,y,angle){
   }
 }
 
+function collideRect(cx, cy, r, rect){
+  var nearestX = clamp(cx, rect.x, rect.x+rect.w);
+  var nearestY = clamp(cy, rect.y, rect.y+rect.h);
+  var dx = cx-nearestX, dy = cy-nearestY;
+  return (dx*dx+dy*dy) < r*r;
+}
+function resolveWalls(oldX, oldY, newX, newY, r){
+  var x = newX;
+  for(var i=0;i<walls.length;i++){
+    if(collideRect(x, oldY, r, walls[i])){ x = oldX; break; }
+  }
+  var y = newY;
+  for(var i=0;i<walls.length;i++){
+    if(collideRect(x, y, r, walls[i])){ y = oldY; break; }
+  }
+  return {x:x, y:y};
+}
+function explodeRocket(x, y, dmg){
+  for(var k=0;k<14;k++){
+    var a = Math.random()*Math.PI*2;
+    addParticle(x,y,Math.cos(a)*90,Math.sin(a)*90,0.35,'#ff8a3c',2);
+  }
+  shakeTime = 0.25; shakeMag = 5;
+  beep(90, 0.25, 'sawtooth', 0.2, 40);
+  for(var zi=zombies.length-1; zi>=0; zi--){
+    var zz2 = zombies[zi];
+    var dd = dist(x,y,zz2.x,zz2.y);
+    if(dd < 26){
+      zz2.hp -= dmg * (dd<10 ? 1 : 0.6);
+      burstBlood(zz2.x,zz2.y);
+      if(zz2.hp <= 0){
+        zombies.splice(zi,1);
+        score += 10;
+        addCoins(10);
+        sfxKill();
+      }
+    }
+  }
+}
+
 function fireBullet(){
+  if(grenadeAmmo > 0){
+    grenadeAmmo--;
+    bullets.push({
+      x: player.x + Math.cos(player.angle)*13,
+      y: player.y + Math.sin(player.angle)*13,
+      vx: Math.cos(player.angle)*140,
+      vy: Math.sin(player.angle)*140,
+      life: 1.6,
+      dmg: 40,
+      rocket: true
+    });
+    burstMuzzle(player.x + Math.cos(player.angle)*14, player.y + Math.sin(player.angle)*14, player.angle);
+    beep(160, 0.12, 'sawtooth', 0.18, 60);
+    shakeTime = 0.06; shakeMag = 2;
+    player.fireCooldown = 0.6;
+    return;
+  }
   var speed = 190;
   var boosted = weaponBoostTimer > 0;
   var baseDmg = 12, spread = [0];
@@ -1024,6 +1108,7 @@ function spawnPickup(x,y,forceType){
 
 function spawnSpecialPickup(){
   var types = ['weapon','health','speed','score'];
+  if(wave >= 10) types.push('grenade');
   var type = types[(Math.random()*types.length)|0];
   specialPickup = {
     x: rand(30, W-30),
@@ -1046,6 +1131,8 @@ function collectSpecialPickup(type){
     speedBoostTimer = 10;
   } else if(type === 'score'){
     score += 150;
+  } else if(type === 'grenade'){
+    grenadeAmmo += 3;
   }
 }
 
@@ -1441,8 +1528,14 @@ function update(dt){
   if(secretSpeedTimer > 0) speedMult = 4;
   else if(speedBoostTimer > 0) speedMult = 1.6;
   var moveSpeed = player.speed * speedMult;
-  player.x = clamp(player.x + mvx*moveSpeed*dt, 6, W-6);
-  player.y = clamp(player.y + mvy*moveSpeed*dt, 6, H-6);
+  var pNewX = player.x + mvx*moveSpeed*dt;
+  var pNewY = player.y + mvy*moveSpeed*dt;
+  if(walls.length){
+    var pResolved = resolveWalls(player.x, player.y, pNewX, pNewY, player.r);
+    pNewX = pResolved.x; pNewY = pResolved.y;
+  }
+  player.x = clamp(pNewX, 6, W-6);
+  player.y = clamp(pNewY, 6, H-6);
 
   if(isTouch){
     var target = nearestZombie(player.x, player.y);
@@ -1515,6 +1608,33 @@ function update(dt){
     var b = bullets[i];
     b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
     if(b.life <= 0 || b.x<-10||b.x>W+10||b.y<-10||b.y>H+10){ bullets.splice(i,1); continue; }
+
+    if(b.rocket){
+      var rocketDone = false;
+      for(var rw=0; rw<walls.length; rw++){
+        if(collideRect(b.x,b.y,4,walls[rw])){ walls.splice(rw,1); rocketDone = true; break; }
+      }
+      if(!rocketDone){
+        if(boss && dist(b.x,b.y,boss.x,boss.y) < boss.r+4){ hitBoss(b.x,b.y,b.dmg); rocketDone = true; }
+        else {
+          for(var rz=0; rz<zombies.length; rz++){
+            if(dist(b.x,b.y,zombies[rz].x,zombies[rz].y) < zombies[rz].r+4){ rocketDone = true; break; }
+          }
+        }
+      }
+      if(rocketDone){ explodeRocket(b.x,b.y,b.dmg); bullets.splice(i,1); }
+      continue;
+    }
+    var blockedByWall = false;
+    for(var bw=0; bw<walls.length; bw++){
+      if(collideRect(b.x,b.y,2,walls[bw])){ blockedByWall = true; break; }
+    }
+    if(blockedByWall){
+      addParticle(b.x,b.y,0,0,0.15,'#8a8a8a',1);
+      bullets.splice(i,1);
+      continue;
+    }
+
     var hitSomething = false;
     for(var j=zombies.length-1;j>=0;j--){
       var z = zombies[j];
@@ -1565,8 +1685,13 @@ function update(dt){
     var ang = Math.atan2(player.y-zz.y, player.x-zz.x);
     zz.angle = ang;
     zz.bob += dt*8;
-    zz.x += Math.cos(ang)*zz.speed*dt;
-    zz.y += Math.sin(ang)*zz.speed*dt;
+    var zNewX = zz.x + Math.cos(ang)*zz.speed*dt;
+    var zNewY = zz.y + Math.sin(ang)*zz.speed*dt;
+    if(walls.length){
+      var zResolved = resolveWalls(zz.x, zz.y, zNewX, zNewY, zz.r);
+      zNewX = zResolved.x; zNewY = zResolved.y;
+    }
+    zz.x = zNewX; zz.y = zNewY;
     if(zz.contactCooldown > 0) zz.contactCooldown -= dt;
     if(dist(zz.x,zz.y,player.x,player.y) < zz.r+player.r && zz.contactCooldown <= 0){
       zz.contactCooldown = 0.6;
@@ -1613,6 +1738,22 @@ function drawTiledBg(){
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';
   ctx.lineWidth = 1;
   for(var gx=0; gx<W; gx+=8){ ctx.beginPath(); ctx.moveTo(gx+0.5,0); ctx.lineTo(gx+0.5,H); ctx.stroke(); }
+}
+
+function drawWalls(){
+  for(var i=0;i<walls.length;i++){
+    var w = walls[i];
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(w.x+1, w.y+2, w.w, w.h);
+    ctx.fillStyle = '#1c1c22';
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+    ctx.fillStyle = '#3a3a46';
+    ctx.fillRect(w.x, w.y, w.w, 2);
+    ctx.fillRect(w.x, w.y, 2, w.h);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(w.x+0.5, w.y+0.5, w.w-1, w.h-1);
+  }
 }
 
 function drawPlayer(){
@@ -1938,7 +2079,7 @@ function drawPickup(pu){
 
 function drawSpecialPickup(sp){
   var pulse = Math.sin(performance.now()/100)*0.5+0.5;
-  var colors = { weapon:'#ff6a3c', health:'#ff4d6a', speed:'#3cc8ff', score:'#ffe14d' };
+  var colors = { weapon:'#ff6a3c', health:'#ff4d6a', speed:'#3cc8ff', score:'#ffe14d', grenade:'#ff3c3c' };
   var col = colors[sp.type] || '#ffffff';
 
   ctx.save();
@@ -1963,6 +2104,9 @@ function drawSpecialPickup(sp){
     ctx.moveTo(sp.x-2,sp.y-5); ctx.lineTo(sp.x+2,sp.y-1); ctx.lineTo(sp.x-1,sp.y-1);
     ctx.lineTo(sp.x+3,sp.y+5); ctx.lineTo(sp.x-3,sp.y+1); ctx.lineTo(sp.x,sp.y+1);
     ctx.closePath(); ctx.fill();
+  } else if(sp.type === 'grenade'){
+    ctx.fillRect(sp.x-1, sp.y-4, 2, 5);
+    ctx.beginPath(); ctx.arc(sp.x, sp.y+1, 3, 0, Math.PI*2); ctx.fill();
   } else {
     ctx.fillRect(sp.x-1, sp.y-4, 2, 2);
     ctx.fillRect(sp.x-1, sp.y+2, 2, 2);
@@ -2013,6 +2157,7 @@ function drawHud(){
   if(weaponBoostTimer > 0) buffs.push('OVERCHARGE');
   if(speedBoostTimer > 0) buffs.push('SPEED');
   if(secretSpeedTimer > 0) buffs.push('x4 SPEED!');
+  if(grenadeAmmo > 0) buffs.push('ROCKETS x' + grenadeAmmo);
   if(buffs.length){
     ctx.textAlign = 'center';
     ctx.fillStyle = PAL.ammo;
@@ -2026,6 +2171,7 @@ function render(){
     ctx.translate(rand(-shakeMag,shakeMag), rand(-shakeMag,shakeMag));
   }
   drawTiledBg();
+  drawWalls();
 
   if(state === STATE_PLAY || state === STATE_PAUSE){
     for(var i=0;i<pickups.length;i++) drawPickup(pickups[i]);
@@ -2037,9 +2183,15 @@ function render(){
       else drawBossWorm(boss);
     }
     drawPlayer();
-    ctx.fillStyle = getCosmeticColor('bullet', equippedCosmetics.bullet);
     for(var k=0;k<bullets.length;k++){
-      ctx.fillRect(bullets[k].x-1, bullets[k].y-1, 2, 2);
+      var bDraw = bullets[k];
+      if(bDraw.rocket){
+        ctx.fillStyle = '#ff8a3c';
+        ctx.fillRect(bDraw.x-2, bDraw.y-2, 4, 4);
+      } else {
+        ctx.fillStyle = getCosmeticColor('bullet', equippedCosmetics.bullet);
+        ctx.fillRect(bDraw.x-1, bDraw.y-1, 2, 2);
+      }
     }
     for(var bb=0;bb<bossBullets.length;bb++){
       ctx.fillStyle = bossBullets[bb].color || '#c04ae8';
