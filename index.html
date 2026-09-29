@@ -195,6 +195,39 @@ body{background:var(--ink)}
 .gy-shop-name{font-size:8px;color:var(--accent)}
 .gy-shop-desc{font-size:6px;color:var(--text-dim);line-height:1.3}
 .gy-shop-cost{font-size:8px;color:#ffe14d}
+.gy-skin-categories{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  width:100%;
+  max-width:280px;
+  max-height:150px;
+  overflow-y:auto;
+  padding:2px;
+}
+.gy-skin-row{display:flex;flex-direction:column;gap:4px}
+.gy-skin-row-label{font-size:7px;color:var(--text-dim);letter-spacing:1px;text-align:left}
+.gy-skin-swatches{display:flex;gap:8px;flex-wrap:wrap}
+.gy-swatch{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  border:2px solid var(--panel-line);
+  cursor:pointer;
+  position:relative;
+  padding:0;
+}
+.gy-swatch.equipped{border-color:var(--accent);box-shadow:0 0 0 2px rgba(232,195,74,0.45)}
+.gy-swatch.locked{opacity:0.5}
+.gy-swatch-cost{
+  position:absolute;
+  bottom:-10px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:6px;
+  color:#ffe14d;
+  white-space:nowrap;
+}
 @media (max-width:480px){
   .gy-title{font-size:16px}
   .gy-sub{font-size:8px}
@@ -208,7 +241,7 @@ body{background:var(--ink)}
 <body>
 <div class="gy-root">
   <div class="gy-topbar">
-    <span>HIGH SCORE: <b id="gyHiTop" style="color:var(--accent)">0</b></span>
+    <span>HIGH SCORE: <b id="gyHiTop" style="color:var(--accent)">0</b> &nbsp;·&nbsp; $<b id="gyBankCoins" style="color:#ffe14d">0</b></span>
     <button class="gy-mute" id="gyMuteBtn" type="button">SOUND: ON</button>
   </div>
 
@@ -224,6 +257,7 @@ body{background:var(--ink)}
         Best run: <b id="gyHiMid">0</b> pts &nbsp;·&nbsp; Wave <b id="gyHiWave">0</b>
       </div>
       <button class="gy-btn" id="gyStartBtn" type="button">START SHIFT</button>
+      <button class="gy-btn gy-ghost" id="gySkinBtn" type="button">ИЗМЕНИТЬ СКИН</button>
       <div class="gy-controls-hint" id="gyHintDesktop">
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to move &nbsp;·&nbsp;
         MOUSE to aim &nbsp;·&nbsp; hold <kbd>CLICK</kbd> to fire &nbsp;·&nbsp; <kbd>P</kbd> to pause
@@ -255,6 +289,13 @@ body{background:var(--ink)}
       <div class="gy-stats">Монеты: <b id="gyShopCoins" style="color:#ffe14d">0</b></div>
       <div class="gy-shop-grid" id="gyShopGrid"></div>
       <button class="gy-btn gy-ghost" id="gyShopSkip" type="button">ПРОПУСТИТЬ</button>
+    </div>
+
+    <div class="gy-overlay" id="gySkinScreen" hidden>
+      <div style="font-size:13px;color:var(--accent)">ИЗМЕНИТЬ СКИН</div>
+      <div class="gy-stats">Монеты: <b id="gySkinCoins" style="color:#ffe14d">0</b></div>
+      <div class="gy-skin-categories" id="gySkinCategories"></div>
+      <button class="gy-btn gy-ghost" id="gySkinBack" type="button">НАЗАД</button>
     </div>
 
     <button class="gy-fire-btn" id="gyFireBtn" type="button" aria-label="Fire" hidden>FIRE</button>
@@ -295,12 +336,80 @@ function loadBool(key, fallback){
 function saveBool(key, val){
   try{ localStorage.setItem(key, val ? '1' : '0'); }catch(e){}
 }
+function loadJSON(key, fallback){
+  try{
+    var v = localStorage.getItem(key);
+    return v === null ? fallback : JSON.parse(v);
+  }catch(e){ return fallback; }
+}
+function saveJSON(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+}
+
+var COSMETIC_CATEGORIES = [
+  { key:'headband', label:'БАНДАНА', swatches:[
+      {id:'red', color:'#b31f24', dark:'#6e1013', cost:0},
+      {id:'blue', color:'#2a5fb3', dark:'#17335e', cost:100},
+      {id:'green', color:'#2f8f2f', dark:'#1a521a', cost:100},
+      {id:'purple', color:'#7a2fb3', dark:'#451a66', cost:100},
+      {id:'black', color:'#2a2a2a', dark:'#121212', cost:120}
+  ]},
+  { key:'eyes', label:'ГЛАЗА', swatches:[
+      {id:'brown', color:'#4a2e1a', dark:'#4a2e1a', cost:0},
+      {id:'blue', color:'#3ca0e8', dark:'#3ca0e8', cost:80},
+      {id:'green', color:'#3ce87a', dark:'#3ce87a', cost:80},
+      {id:'red', color:'#e83c3c', dark:'#e83c3c', cost:100},
+      {id:'yellow', color:'#e8d23c', dark:'#e8d23c', cost:80}
+  ]},
+  { key:'outfit', label:'ФОРМА', swatches:[
+      {id:'olive', color:'#3a4a2a', dark:'#232e19', cost:0},
+      {id:'navy', color:'#1f2a4a', dark:'#10152a', cost:120},
+      {id:'maroon', color:'#5a1f2a', dark:'#33121a', cost:120},
+      {id:'black', color:'#222222', dark:'#101010', cost:140},
+      {id:'tan', color:'#8a7a4a', dark:'#55482a', cost:120}
+  ]},
+  { key:'bullet', label:'ТРАССЕР ПУЛЬ', swatches:[
+      {id:'gold', color:'#ffe98a', dark:'#ffe98a', cost:0},
+      {id:'cyan', color:'#5ae8ff', dark:'#5ae8ff', cost:60},
+      {id:'pink', color:'#ff5ac8', dark:'#ff5ac8', cost:60},
+      {id:'lime', color:'#a0ff5a', dark:'#a0ff5a', cost:60}
+  ]}
+];
+
+function getCosmeticColor(catKey, id){
+  for(var i=0;i<COSMETIC_CATEGORIES.length;i++){
+    if(COSMETIC_CATEGORIES[i].key !== catKey) continue;
+    var sw = COSMETIC_CATEGORIES[i].swatches;
+    for(var j=0;j<sw.length;j++){ if(sw[j].id === id) return sw[j].color; }
+  }
+  return '#ffffff';
+}
+function getCosmeticColorDark(catKey, id){
+  for(var i=0;i<COSMETIC_CATEGORIES.length;i++){
+    if(COSMETIC_CATEGORIES[i].key !== catKey) continue;
+    var sw = COSMETIC_CATEGORIES[i].swatches;
+    for(var j=0;j<sw.length;j++){ if(sw[j].id === id) return sw[j].dark; }
+  }
+  return '#000000';
+}
+
+var totalCoins = loadNum('gy_totalcoins', 0);
+var ownedCosmetics = loadJSON('gy_owned_cosmetics', { headband:['red'], eyes:['brown'], outfit:['olive'], bullet:['gold'] });
+var equippedCosmetics = loadJSON('gy_equipped_cosmetics', { headband:'red', eyes:'brown', outfit:'olive', bullet:'gold' });
+function addCoins(n){
+  coins += n;
+  totalCoins += n;
+  saveNum('gy_totalcoins', totalCoins);
+  var bankEl = document.getElementById('gyBankCoins');
+  if(bankEl) bankEl.textContent = totalCoins;
+}
 
 var highScore = loadNum('gy_highscore', 0);
 var highWave = loadNum('gy_highwave', 0);
 document.getElementById('gyHiTop').textContent = highScore;
 document.getElementById('gyHiMid').textContent = highScore;
 document.getElementById('gyHiWave').textContent = highWave;
+document.getElementById('gyBankCoins').textContent = totalCoins;
 
 var soundOn = loadBool('gy_sound', true);
 var muteBtn = document.getElementById('gyMuteBtn');
@@ -466,8 +575,68 @@ function showScreen(which){
   titleScreen.hidden = which !== 'title';
   pauseScreen.hidden = which !== 'pause';
   overScreen.hidden = which !== 'over';
+  skinScreenEl.hidden = which !== 'skin';
   fireBtnEl.hidden = !(isTouch && state === STATE_PLAY);
 }
+
+var skinScreenEl = document.getElementById('gySkinScreen');
+var skinCategoriesEl = document.getElementById('gySkinCategories');
+var skinCoinsEl = document.getElementById('gySkinCoins');
+
+function renderSkinShop(){
+  skinCoinsEl.textContent = totalCoins;
+  skinCategoriesEl.innerHTML = '';
+  for(var c=0; c<COSMETIC_CATEGORIES.length; c++){
+    (function(cat){
+      var row = document.createElement('div');
+      row.className = 'gy-skin-row';
+      var label = document.createElement('div');
+      label.className = 'gy-skin-row-label';
+      label.textContent = cat.label;
+      row.appendChild(label);
+      var wrap = document.createElement('div');
+      wrap.className = 'gy-skin-swatches';
+      for(var s=0; s<cat.swatches.length; s++){
+        (function(sw){
+          var owned = ownedCosmetics[cat.key].indexOf(sw.id) !== -1;
+          var equipped = equippedCosmetics[cat.key] === sw.id;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'gy-swatch' + (equipped ? ' equipped' : '') + (!owned ? ' locked' : '');
+          btn.style.background = sw.color;
+          if(!owned){
+            var costSpan = document.createElement('span');
+            costSpan.className = 'gy-swatch-cost';
+            costSpan.textContent = '$' + sw.cost;
+            btn.appendChild(costSpan);
+          }
+          btn.addEventListener('click', function(){
+            if(owned){
+              equippedCosmetics[cat.key] = sw.id;
+              saveJSON('gy_equipped_cosmetics', equippedCosmetics);
+              sfxPickup();
+              renderSkinShop();
+            } else if(totalCoins >= sw.cost){
+              totalCoins -= sw.cost;
+              saveNum('gy_totalcoins', totalCoins);
+              ownedCosmetics[cat.key].push(sw.id);
+              equippedCosmetics[cat.key] = sw.id;
+              saveJSON('gy_owned_cosmetics', ownedCosmetics);
+              saveJSON('gy_equipped_cosmetics', equippedCosmetics);
+              sfxSecret();
+              renderSkinShop();
+            }
+          });
+          wrap.appendChild(btn);
+        })(cat.swatches[s]);
+      }
+      row.appendChild(wrap);
+      skinCategoriesEl.appendChild(row);
+    })(COSMETIC_CATEGORIES[c]);
+  }
+}
+document.getElementById('gySkinBtn').addEventListener('click', function(){ renderSkinShop(); showScreen('skin'); });
+document.getElementById('gySkinBack').addEventListener('click', function(){ showScreen('title'); });
 
 var shopScreenEl = document.getElementById('gyShopScreen');
 var shopGridEl = document.getElementById('gyShopGrid');
@@ -1031,7 +1200,7 @@ function killBoss(){
   if(bt === 'chebranya') bonus = 400 + wave*20;
   else if(bt === 'worm') bonus = 350 + wave*18;
   score += bonus;
-  coins += 100;
+  addCoins(100);
   spawnPickup(clamp(bx-10,10,W-10), clamp(by,10,H-10), 'health');
   spawnPickup(clamp(bx+10,10,W-10), clamp(by,10,H-10), 'rapid');
   sfxBossDown();
@@ -1357,7 +1526,7 @@ function update(dt){
         if(z.hp <= 0){
           zombies.splice(j,1);
           score += 10;
-          coins += 10;
+          addCoins(10);
           burstBlood(z.x,z.y);
           sfxKill();
           if(Math.random() < 0.08) spawnPickup(z.x,z.y);
@@ -1452,8 +1621,10 @@ function drawPlayer(){
   ctx.rotate(player.angle);
 
   var hurt = player.hurtFlash > 0;
-  var bodyDark = hurt ? '#ffffff' : PAL.playerCoatDark;
-  var bodyLight = hurt ? '#ffdddd' : PAL.playerCoat;
+  var outfitCol = getCosmeticColor('outfit', equippedCosmetics.outfit);
+  var outfitDark = getCosmeticColorDark('outfit', equippedCosmetics.outfit);
+  var bodyDark = hurt ? '#ffffff' : outfitDark;
+  var bodyLight = hurt ? '#ffdddd' : outfitCol;
   var skin = hurt ? '#ffdddd' : PAL.playerSkin;
   var skinDark = hurt ? '#ffbbbb' : PAL.playerSkinDark;
 
@@ -1517,10 +1688,12 @@ function drawPlayer(){
   ctx.beginPath();
   ctx.arc(2.9,0,2.3,0,Math.PI*2);
   ctx.fill();
-  ctx.fillStyle = PAL.playerHeadband;
+  ctx.fillStyle = getCosmeticColor('headband', equippedCosmetics.headband);
   ctx.fillRect(1.4,-1,4,1.5);
-  ctx.fillStyle = PAL.playerHeadbandDark;
+  ctx.fillStyle = getCosmeticColorDark('headband', equippedCosmetics.headband);
   ctx.fillRect(0.2,-0.6,1.4,1.6);
+  ctx.fillStyle = getCosmeticColor('eyes', equippedCosmetics.eyes);
+  ctx.fillRect(3.6, 0.6, 1.2, 1.2);
   ctx.restore();
 
   ctx.restore();
@@ -1864,7 +2037,7 @@ function render(){
       else drawBossWorm(boss);
     }
     drawPlayer();
-    ctx.fillStyle = PAL.bulletCore;
+    ctx.fillStyle = getCosmeticColor('bullet', equippedCosmetics.bullet);
     for(var k=0;k<bullets.length;k++){
       ctx.fillRect(bullets[k].x-1, bullets[k].y-1, 2, 2);
     }
